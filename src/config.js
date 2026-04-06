@@ -8,7 +8,7 @@ const CONFIG = {
   // Signaling server
   // Dev  : PeerJS cloud (temporaire, aucune config requise)
   // Prod : ton serveur Railway — ex: 'ether-signal-prod.up.railway.app'
-  SIGNAL_HOST:   DEV ? '0.peerjs.com'                    : 'REMPLACE_PAR_URL_RAILWAY',
+  SIGNAL_HOST:   DEV ? '0.peerjs.com'                    : 'ether-signal-production.up.railway.app',
   SIGNAL_PORT:   443,
   SIGNAL_PATH:   DEV ? '/'                               : '/signal',
   SIGNAL_SECURE: true,
