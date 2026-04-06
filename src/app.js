@@ -30,6 +30,7 @@ async function main() {
       UI.notifyMessage(text, isImage);
     },
     onScreenshot: ()           => UI.showScreenshotToast(),
+    onSecured:    ()           => UI.sysMsg('Connexion sécurisée ✓ — tu peux écrire.'),
     onDisconnect: ()           => UI.sysMsg('Contact déconnecté. Reconnexion...'),
     onReconnect:  ()           => UI.sysMsg('Reconnecté ✓'),
   });
@@ -183,7 +184,7 @@ async function _sendMsg() {
     return;
   }
 
-  if (!Peer.isConnected()) { UI.sysMsg('Non connecté.'); return; }
+  if (!Peer.isConnected()) { UI.sysMsg('Connexion en cours, patiente 2 secondes...'); return; }
   try {
     await Peer.send(text, CONFIG.TTL.text);
     const msg = Storage.push(text, true, CONFIG.TTL.text);
@@ -203,7 +204,7 @@ async function _sendPhoto() {
     if (_mode === 'group') {
       await Groups.send(b64, _identity.id.slice(0, 8));
     } else {
-      if (!Peer.isConnected()) { UI.sysMsg('Non connecté.'); return; }
+      if (!Peer.isConnected()) { UI.sysMsg('Connexion en cours, patiente 2 secondes...'); return; }
       await Peer.send(b64, CONFIG.TTL.image, true);
     }
     const msg = Storage.push(b64, true, CONFIG.TTL.image, true);

@@ -19,6 +19,7 @@ let _onScreenshot = () => {};
 let _onDisconnect = () => {};
 let _onIncoming   = () => {};
 let _onReconnect  = () => {};
+let _onSecured    = () => {}; // handshake terminé → prêt à envoyer
 
 // ── Init ──────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ function init(identity, cbs) {
   _onDisconnect = cbs.onDisconnect || _onDisconnect;
   _onIncoming   = cbs.onIncoming   || _onIncoming;
   _onReconnect  = cbs.onReconnect  || _onReconnect;
+  _onSecured    = cbs.onSecured    || _onSecured;
 
   _boot();
 }
@@ -94,18 +96,11 @@ function _wire(c) {
   _conn = c;
   _sharedKey = null;
 
-  // Pour les connexions ENTRANTES, 'open' a déjà tiré avant _wire()
-  // → on envoie le handshake immédiatement si déjà ouvert
-  const sendHandshake = () => c.send({ type: 'handshake', pubKey: _identity.pubKeyB64 });
-  if (c.open) {
-    sendHandshake();
-  } else {
-    c.on('open', sendHandshake);
-  }
-
+  // 1. Écouter les données EN PREMIER (évite la race condition)
   c.on('data', async data => {
     if (data.type === 'handshake') {
       _sharedKey = await Crypto.deriveSharedKey(_identity.privateKey, data.pubKey);
+      _onSecured(); // connexion chiffrée et prête
       return;
     }
     if (data.type === 'msg' && _sharedKey) {
@@ -118,16 +113,12 @@ function _wire(c) {
     if (data.type === 'screenshot') _onScreenshot();
   });
 
-  c.on('close', () => {
-    _sharedKey = null;
-    _onDisconnect();
-    _tryAutoReconnect();
-  });
-  c.on('error', () => {
-    _sharedKey = null;
-    _onDisconnect();
-    _tryAutoReconnect();
-  });
+  c.on('close', () => { _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
+  c.on('error', () => { _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
+
+  // 2. Envoyer le handshake APRÈS avoir posé le listener
+  const sendHandshake = () => c.send({ type: 'handshake', pubKey: _identity.pubKeyB64 });
+  if (c.open) { sendHandshake(); } else { c.on('open', sendHandshake); }
 }
 
 // ── Envoi ─────────────────────────────────────────────────────────────
