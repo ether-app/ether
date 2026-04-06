@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#080808">
+  <title>ÉTHER</title>
+  <link rel="stylesheet" href="src/style.css">
+  <link rel="manifest"   href="manifest.json">
+</head>
+<body>
+
+  <!-- ── Screen 1 : Identité ─────────────────────────────────── -->
+  <div id="screen-identity" class="screen active">
+    <div class="logo">ÉTHER</div>
+    <div class="tagline">Parle. Disparais.</div>
+    <div id="qr-container"></div>
+    <p class="id-label">Ton identité</p>
+    <div id="my-id" class="id-display"></div>
+    <button id="btn-copy" class="btn-secondary">Copier mon ID</button>
+    <div class="divider">─── ou ───</div>
+    <button id="btn-go-connect" class="btn-primary">Connecter →</button>
+    <p id="peer-status" class="peer-status">Initialisation...</p>
+  </div>
+
+  <!-- ── Screen 2 : Connexion ────────────────────────────────── -->
+  <div id="screen-connect" class="screen">
+    <button class="back" id="btn-back">← Retour</button>
+    <h2 class="screen-title">Connecter</h2>
+
+    <!-- Onglets -->
+    <div class="tabs">
+      <button id="tab-direct" class="tab active">Direct</button>
+      <button id="tab-group"  class="tab">Groupe</button>
+    </div>
+
+    <!-- Panel Direct -->
+    <div id="panel-direct" class="tab-panel active">
+      <p class="hint">Colle l'identité de ton contact</p>
+      <div class="input-row">
+        <input id="peer-id-input" type="text" placeholder="e-xxxxxxxxxxxxxxxxxxxx"
+               class="id-input" autocomplete="off" spellcheck="false">
+        <button id="btn-scan-qr" class="btn-icon" title="Scanner QR">⊡</button>
+      </div>
+      <button id="btn-do-connect" class="btn-primary">Connecter</button>
+    </div>
+
+    <!-- Panel Groupe -->
+    <div id="panel-group" class="tab-panel">
+      <button id="btn-create-group" class="btn-primary">Créer un groupe</button>
+      <div class="divider-sm">─── rejoindre ───</div>
+      <input id="group-token-input" type="text" placeholder="Token du groupe (ex: ABC123)"
+             class="id-input mono-upper" maxlength="8" autocomplete="off" spellcheck="false">
+      <button id="btn-join-group" class="btn-secondary">Rejoindre</button>
+    </div>
+
+    <p id="connect-status" class="status-msg"></p>
+  </div>
+
+  <!-- ── Screen 3 : Chat ─────────────────────────────────────── -->
+  <div id="screen-chat" class="screen">
+    <header class="chat-top">
+      <div class="contact-info">
+        <span class="dot-live"></span>
+        <span id="contact-label">Contact</span>
+        <span id="member-count" class="member-count"></span>
+      </div>
+      <span class="chat-meta">P2P · E2E · éphémère</span>
+    </header>
+    <div id="messages"></div>
+    <div class="chat-bottom">
+      <button id="btn-photo" class="btn-icon-chat" title="Photo">📷</button>
+      <input id="msg-input" type="text" placeholder="Message..." class="msg-input" autocomplete="off">
+      <button id="btn-send" class="btn-send">↑</button>
+    </div>
+    <input id="photo-input" type="file" accept="image/*" hidden>
+  </div>
+
+  <!-- ── Screen 4 : Groupe créé ──────────────────────────────── -->
+  <div id="screen-group-create" class="screen">
+    <div class="logo" style="font-size:28px;letter-spacing:6px">GROUPE CRÉÉ</div>
+    <p class="hint">Partage ce token pour inviter des membres</p>
+    <div id="group-qr"></div>
+    <p class="id-label">Token</p>
+    <div id="group-token-display" class="id-display token-big"></div>
+    <button id="btn-group-copy-token" class="btn-secondary">Copier le token</button>
+    <button id="btn-group-open-chat" class="btn-primary">Ouvrir le chat →</button>
+  </div>
+
+  <!-- ── Overlay QR Scanner ──────────────────────────────────── -->
+  <div id="qr-scanner-overlay">
+    <div class="scanner-inner">
+      <button id="btn-close-scanner" class="scanner-close">✕</button>
+      <video id="qr-video" playsinline muted></video>
+      <div class="scanner-frame"></div>
+      <p class="scanner-hint">Pointe vers le QR code</p>
+    </div>
+  </div>
+
+  <!-- CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script type="module" src="src/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
