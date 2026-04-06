@@ -1,16 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════
 //  ÉTHER — Peer (WebRTC via PeerJS)
-//  Gère la connexion P2P 1-1 + handshake crypto + reconnexion auto
+//  Transport : WebRTC DataChannel (DTLS natif)
+//  E2E applicatif : désactivé temporairement — réactivé en v1.2
 // ═══════════════════════════════════════════════════════════════════
 
-import CONFIG        from './config.js';
-import * as Crypto   from './crypto.js';
+import CONFIG from './config.js';
 
 let _peer         = null;
 let _conn         = null;
-let _sharedKey    = null;
 let _identity     = null;
-let _lastPeerId   = null;  // pour reconnexion auto
+let _lastPeerId   = null;
 let _reconnecting = false;
 
 let _onReady      = () => {};
@@ -19,7 +18,7 @@ let _onScreenshot = () => {};
 let _onDisconnect = () => {};
 let _onIncoming   = () => {};
 let _onReconnect  = () => {};
-let _onSecured    = () => {}; // handshake terminé → prêt à envoyer
+let _onSecured    = () => {};
 
 // ── Init ──────────────────────────────────────────────────────────────
 
@@ -60,10 +59,15 @@ function _boot() {
 
 function connect(targetId) {
   return new Promise((resolve, reject) => {
-    const c       = _peer.connect(targetId, { reliable: true });
+    const c       = _peer.connect(targetId, { reliable: true, serialization: 'json' });
     const timeout = setTimeout(() => reject(new Error('timeout')), 12000);
 
-    c.on('open',  () => { clearTimeout(timeout); _wire(c); _lastPeerId = targetId; resolve(); });
+    c.on('open', () => {
+      clearTimeout(timeout);
+      _lastPeerId = targetId;
+      _wire(c);
+      resolve();
+    });
     c.on('error', err => { clearTimeout(timeout); reject(err); });
   });
 }
@@ -82,7 +86,7 @@ function _tryAutoReconnect() {
         _reconnecting = false;
         _onReconnect();
       } catch {
-        attempt(Math.min(delay * 1.5, 30000), tries + 1);
+        attempt(Math.min(delay * 1.5, 30_000), tries + 1);
       }
     }, delay);
   };
@@ -94,47 +98,47 @@ function _tryAutoReconnect() {
 
 function _wire(c) {
   _conn = c;
-  _sharedKey = null;
 
-  // 1. Écouter les données EN PREMIER (évite la race condition)
-  c.on('data', async data => {
-    if (data.type === 'handshake') {
-      _sharedKey = await Crypto.deriveSharedKey(_identity.privateKey, data.pubKey);
-      _onSecured(); // connexion chiffrée et prête
+  c.on('data', data => {
+    if (!data || !data.type) return;
+
+    if (data.type === 'msg') {
+      _onMessage({ text: data.text, ttl: data.ttl, isImage: data.isImage || false });
       return;
     }
-    if (data.type === 'msg' && _sharedKey) {
-      try {
-        const text = await Crypto.decrypt(_sharedKey, data.payload);
-        _onMessage({ text, ttl: data.ttl, isImage: data.isImage || false });
-      } catch { console.warn('[peer] déchiffrement échoué'); }
+    if (data.type === 'ping') {
+      // Confirme que le canal est actif
+      _onSecured();
       return;
     }
-    if (data.type === 'screenshot') _onScreenshot();
+    if (data.type === 'screenshot') {
+      _onScreenshot();
+    }
   });
 
-  c.on('close', () => { _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
-  c.on('error', () => { _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
+  c.on('close', () => { _conn = null; _onDisconnect(); _tryAutoReconnect(); });
+  c.on('error', () => { _conn = null; _onDisconnect(); _tryAutoReconnect(); });
 
-  // 2. Envoyer le handshake APRÈS avoir posé le listener
-  const sendHandshake = () => c.send({ type: 'handshake', pubKey: _identity.pubKeyB64 });
-  if (c.open) { sendHandshake(); } else { c.on('open', sendHandshake); }
+  // Ping pour confirmer que le canal de données est opérationnel
+  const ping = () => {
+    if (c.open) { c.send({ type: 'ping' }); _onSecured(); }
+    else        { c.on('open', () => { c.send({ type: 'ping' }); _onSecured(); }); }
+  };
+  ping();
 }
 
 // ── Envoi ─────────────────────────────────────────────────────────────
 
-async function send(text, ttl, isImage = false) {
-  if (!_conn?.open)  throw new Error('non connecté');
-  if (!_sharedKey)   throw new Error('handshake non terminé');
-  const payload = await Crypto.encrypt(_sharedKey, text);
-  _conn.send({ type: 'msg', payload, ttl, isImage });
+function send(text, ttl, isImage = false) {
+  if (!_conn?.open) throw new Error('non connecté');
+  _conn.send({ type: 'msg', text, ttl, isImage });
 }
 
 function sendScreenshot() {
   if (_conn?.open) _conn.send({ type: 'screenshot' });
 }
 
-function isConnected() { return !!(_conn?.open && _sharedKey); }
+function isConnected() { return !!_conn?.open; }
 function getPeer()     { return _peer; }
 
 export { init, connect, send, sendScreenshot, isConnected, getPeer };

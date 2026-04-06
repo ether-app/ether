@@ -25,12 +25,12 @@ async function main() {
     onReady:      ()           => UI.setPeerStatus('En ligne · prêt', true),
     onIncoming:   peerId       => { _mode = 'direct'; UI.openChat(peerId); UI.renderAll(Storage.load()); },
     onMessage:    ({ text, ttl, isImage }) => {
-      const msg = Storage.push(text, false, ttl, isImage);
+      const msg = Storage.push(text, false, ttl || CONFIG.TTL.text, isImage);
       UI.renderMessage(msg);
       UI.notifyMessage(text, isImage);
     },
     onScreenshot: ()           => UI.showScreenshotToast(),
-    onSecured:    ()           => UI.sysMsg('Connexion sécurisée ✓ — tu peux écrire.'),
+    onSecured:    ()           => UI.sysMsg('Connecté ✓ — tu peux écrire.'),
     onDisconnect: ()           => UI.sysMsg('Contact déconnecté. Reconnexion...'),
     onReconnect:  ()           => UI.sysMsg('Reconnecté ✓'),
   });
