@@ -152,17 +152,22 @@ export function closeQRScanner() {
 // ── Notifications ─────────────────────────────────────────────────────
 
 export async function requestNotifPermission() {
-  if (Notification.permission === 'default') await Notification.requestPermission();
+  try {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') await Notification.requestPermission();
+  } catch { /* Safari web ignore */ }
 }
 
 export function notifyMessage(text, isImage) {
-  if (document.hidden && Notification.permission === 'granted') {
-    new Notification('ÉTHER', {
-      body: isImage ? '📷 Photo reçue' : text.slice(0, 80),
-      icon: './manifest.json',
-      silent: false,
-    });
-  }
+  try {
+    if (typeof Notification === 'undefined') return;
+    if (document.hidden && Notification.permission === 'granted') {
+      new Notification('ÉTHER', {
+        body: isImage ? '📷 Photo reçue' : text.slice(0, 80),
+        silent: false,
+      });
+    }
+  } catch { /* ignore */ }
 }
 
 // ── Interne ───────────────────────────────────────────────────────────

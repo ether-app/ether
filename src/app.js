@@ -252,4 +252,12 @@ function _wireScreenshots() {
   });
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('[ÉTHER] init failed:', err);
+  document.body.innerHTML = `<div style="color:#ef4444;padding:40px;font-family:monospace;font-size:14px">
+    Erreur de démarrage.<br><br>${err.message}<br><br>
+    <button onclick="location.reload()" style="padding:10px 20px;background:#7c6af7;border:none;color:#fff;border-radius:8px;cursor:pointer">
+      Recharger
+    </button>
+  </div>`;
+});
