@@ -3,9 +3,10 @@
 const DEV = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
 const CONFIG = {
-  SIGNAL_HOST:   DEV ? '0.peerjs.com'                              : 'ether-signal-production.up.railway.app',
+  // Toujours PeerJS cloud pour l'instant — Railway en backup quand stabilisé
+  SIGNAL_HOST:   '0.peerjs.com',
   SIGNAL_PORT:   443,
-  SIGNAL_PATH:   DEV ? '/'                                         : '/signal',
+  SIGNAL_PATH:   '/',
   SIGNAL_SECURE: true,
 
   TTL: {
