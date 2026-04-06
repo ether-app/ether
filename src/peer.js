@@ -94,9 +94,14 @@ function _wire(c) {
   _conn = c;
   _sharedKey = null;
 
-  c.on('open', () => {
-    c.send({ type: 'handshake', pubKey: _identity.pubKeyB64 });
-  });
+  // Pour les connexions ENTRANTES, 'open' a déjà tiré avant _wire()
+  // → on envoie le handshake immédiatement si déjà ouvert
+  const sendHandshake = () => c.send({ type: 'handshake', pubKey: _identity.pubKeyB64 });
+  if (c.open) {
+    sendHandshake();
+  } else {
+    c.on('open', sendHandshake);
+  }
 
   c.on('data', async data => {
     if (data.type === 'handshake') {
