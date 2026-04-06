@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#080808">
+  <meta name="description" content="ÉTHER — Communication P2P éphémère. Zéro serveur. Zéro trace.">
+  <title>ÉTHER</title>
+  <link rel="stylesheet"  href="src/style.css">
+  <link rel="manifest"    href="manifest.json">
+</head>
+<body>
+
+  <!-- ── Screen 1 : Identité ─────────────────────────────────── -->
+  <div id="screen-identity" class="screen active">
+    <div class="logo">ÉTHER</div>
+    <div class="tagline">Parle. Disparais.</div>
+
+    <div id="qr-container"></div>
+
+    <p class="id-label">Ton identité</p>
+    <div id="my-id" class="id-display"></div>
+    <button id="btn-copy" class="btn-secondary">Copier mon ID</button>
+
+    <div class="divider">─── ou ───</div>
+    <button id="btn-go-connect" class="btn-primary">Connecter à quelqu'un →</button>
+
+    <p id="peer-status" class="peer-status">Initialisation...</p>
+  </div>
+
+  <!-- ── Screen 2 : Connexion ────────────────────────────────── -->
+  <div id="screen-connect" class="screen">
+    <button class="back" id="btn-back">← Retour</button>
+    <h2 class="screen-title">Connecter</h2>
+    <p class="hint">Colle l'identité de ton contact</p>
+    <input id="peer-id-input" type="text" placeholder="e-xxxxxxxxxxxxxxxxxxxx"
+           class="id-input" autocomplete="off" spellcheck="false">
+    <button id="btn-do-connect" class="btn-primary">Connecter</button>
+    <p id="connect-status" class="status-msg"></p>
+  </div>
+
+  <!-- ── Screen 3 : Chat ─────────────────────────────────────── -->
+  <div id="screen-chat" class="screen">
+    <header class="chat-top">
+      <div class="contact-info">
+        <span class="dot-live"></span>
+        <span id="contact-label">Contact</span>
+      </div>
+      <span class="chat-meta">P2P · E2E · éphémère</span>
+    </header>
+
+    <div id="messages"></div>
+
+    <div class="chat-bottom">
+      <input id="msg-input" type="text" placeholder="Message..."
+             class="msg-input" autocomplete="off">
+      <button id="btn-send" class="btn-send">↑</button>
+    </div>
+  </div>
+
+  <!-- QRCode lib (CDN, pas de module ES disponible) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- PeerJS -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- App (ES modules) -->
+  <script type="module" src="src/app.js"></script>
+
+  <!-- PWA Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
