@@ -1,13 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════
 //  ÉTHER — Peer (WebRTC via PeerJS)
 //  Transport : WebRTC DataChannel (DTLS natif)
-//  E2E applicatif : désactivé temporairement — réactivé en v1.2
+//  E2E applicatif : ECDH P-256 + AES-GCM, clé dérivée par connexion
 // ═══════════════════════════════════════════════════════════════════
 
 import CONFIG from './config.js';
+import * as Crypto from './crypto.js';
 
 let _peer         = null;
 let _conn         = null;
+let _sharedKey    = null;
 let _identity     = null;
 let _lastPeerId   = null;
 let _reconnecting = false;
@@ -97,18 +99,22 @@ function _tryAutoReconnect() {
 // ── Câblage connexion ─────────────────────────────────────────────────
 
 function _wire(c) {
-  _conn = c;
+  _conn      = c;
+  _sharedKey = null;
 
-  c.on('data', data => {
+  c.on('data', async data => {
     if (!data || !data.type) return;
 
-    if (data.type === 'msg') {
-      _onMessage({ text: data.text, ttl: data.ttl, isImage: data.isImage || false });
+    if (data.type === 'pubkey') {
+      // Dérive le secret partagé dès réception de la clé publique du pair
+      _sharedKey = await Crypto.deriveSharedKey(_identity.privateKey, data.key);
+      _onSecured();
       return;
     }
-    if (data.type === 'ping') {
-      // Confirme que le canal est actif
-      _onSecured();
+    if (data.type === 'msg') {
+      if (!_sharedKey) return; // message arrivé avant la fin de l'échange de clé
+      const text = await Crypto.decrypt(_sharedKey, data.text);
+      _onMessage({ text, ttl: data.ttl, isImage: data.isImage || false });
       return;
     }
     if (data.type === 'screenshot') {
@@ -116,29 +122,32 @@ function _wire(c) {
     }
   });
 
-  c.on('close', () => { _conn = null; _onDisconnect(); _tryAutoReconnect(); });
-  c.on('error', () => { _conn = null; _onDisconnect(); _tryAutoReconnect(); });
+  c.on('close', () => { _conn = null; _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
+  c.on('error', () => { _conn = null; _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
 
-  // Ping pour confirmer que le canal de données est opérationnel
-  const ping = () => {
-    if (c.open) { c.send({ type: 'ping' }); _onSecured(); }
-    else        { c.on('open', () => { c.send({ type: 'ping' }); _onSecured(); }); }
+  // Échange de clé publique — condition du chiffrement E2E de la connexion
+  const exchangeKey = () => {
+    const payload = { type: 'pubkey', key: _identity.pubKeyB64 };
+    if (c.open) c.send(payload);
+    else        c.on('open', () => c.send(payload));
   };
-  ping();
+  exchangeKey();
 }
 
 // ── Envoi ─────────────────────────────────────────────────────────────
 
-function send(text, ttl, isImage = false) {
+async function send(text, ttl, isImage = false) {
   if (!_conn?.open) throw new Error('non connecté');
-  _conn.send({ type: 'msg', text, ttl, isImage });
+  if (!_sharedKey)  throw new Error('échange de clé en cours');
+  const cipher = await Crypto.encrypt(_sharedKey, text);
+  _conn.send({ type: 'msg', text: cipher, ttl, isImage });
 }
 
 function sendScreenshot() {
   if (_conn?.open) _conn.send({ type: 'screenshot' });
 }
 
-function isConnected() { return !!_conn?.open; }
+function isConnected() { return !!_conn?.open && !!_sharedKey; }
 function getPeer()     { return _peer; }
 
 export { init, connect, send, sendScreenshot, isConnected, getPeer };
