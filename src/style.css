@@ -153,3 +153,22 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 /* ── Animations ─────────────────────────────────────────────────────── */
 @keyframes pop      { from { opacity: 0; transform: scale(.95) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes dissolve { to   { opacity: 0; transform: scale(.93); max-height: 0; padding: 0; margin: 0; overflow: hidden; } }
+
+/* ── Code de sécurité ─────────────────────────────────────────────── */
+.safety-bar { position: absolute; top: 52px; left: 0; right: 0; z-index: 5;
+  border-bottom: 1px solid var(--border); background: var(--bg2); padding: 6px 16px; }
+.safety-toggle { background: none; border: none; color: var(--accent); font-size: 12px;
+  font-family: var(--font); cursor: pointer; padding: 4px 0; }
+.safety-bar.verified .safety-toggle { color: var(--green); }
+.safety-detail { display: none; padding: 4px 0 10px; }
+.safety-bar.open .safety-detail { display: block; }
+.safety-hint { font-size: 12px; color: var(--dim); margin: 0 0 8px; line-height: 1.4; }
+.safety-code { font-family: monospace; font-size: 20px; letter-spacing: 2px; color: var(--text);
+  text-align: center; padding: 10px; background: var(--bg3); border-radius: 10px; word-spacing: 6px; }
+.safety-actions { display: flex; gap: 8px; margin-top: 10px; }
+.safety-btn { flex: 1; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: var(--font); border: 1px solid var(--border); background: var(--bg3); color: var(--text); }
+.safety-btn.ok { border-color: var(--green); color: var(--green); }
+.safety-btn.ko { border-color: var(--red); color: var(--red); }
+.msg-from { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+.share-hint { max-width: 320px; text-align: center; font-size: 12px; margin: 4px 0 0; }

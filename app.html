@@ -17,7 +17,8 @@
     <div id="qr-container"></div>
     <p class="id-label">Ton identité</p>
     <div id="my-id" class="id-display"></div>
-    <button id="btn-copy" class="btn-secondary">Copier mon ID</button>
+    <button id="btn-copy" class="btn-secondary">Partager mon lien</button>
+    <p class="hint share-hint">À distance : envoie ton lien par SMS ou messagerie, puis vérifiez le code de sécurité au téléphone.</p>
     <div class="divider">─── ou ───</div>
     <button id="btn-go-connect" class="btn-primary">Connecter →</button>
     <p id="peer-status" class="peer-status">Initialisation...</p>
@@ -67,6 +68,17 @@
       </div>
       <span class="chat-meta">P2P · E2E · éphémère</span>
     </header>
+    <div id="safety-bar" class="safety-bar" hidden>
+      <button id="btn-safety-toggle" class="safety-toggle"><span id="safety-state">🔒 Vérifier le contact</span></button>
+      <div class="safety-detail">
+        <p class="safety-hint">Lisez ce code à voix haute avec votre contact (en face ou par téléphone). Il doit être identique sur vos deux écrans.</p>
+        <div id="safety-code" class="safety-code"></div>
+        <div class="safety-actions">
+          <button id="btn-safety-same" class="safety-btn ok">Identique</button>
+          <button id="btn-safety-diff" class="safety-btn ko">Différent</button>
+        </div>
+      </div>
+    </div>
     <div id="messages"></div>
     <div class="chat-bottom">
       <button id="btn-photo" class="btn-icon-chat" title="Photo">📷</button>

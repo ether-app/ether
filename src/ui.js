@@ -11,10 +11,11 @@ export function showScreen(id) {
 
 // ── Screen 1 — Identité ──────────────────────────────────────────────
 
-export function initIdentity(id) {
+export function initIdentity(id, link) {
   document.getElementById('my-id').textContent = id;
+  // Le QR contient le lien d'invitation : l'appareil photo de l'iPhone l'ouvre directement
   new QRCode(document.getElementById('qr-container'), {
-    text: id, width: 160, height: 160,
+    text: link || id, width: 160, height: 160,
     colorDark: '#000', colorLight: '#fff',
     correctLevel: QRCode.CorrectLevel.M,
   });
@@ -170,7 +171,32 @@ export function notifyMessage(text, isImage) {
   } catch { /* ignore */ }
 }
 
+// ── Code de sécurité ──────────────────────────────────────────────────
+
+export function showSafetyCode(code, verified) {
+  const bar = document.getElementById('safety-bar');
+  document.getElementById('safety-code').textContent = code;
+  bar.hidden = false;
+  bar.classList.toggle('verified', verified);
+  document.getElementById('safety-state').textContent = verified ? '✓ Contact vérifié' : '🔒 Vérifier le contact';
+  bar.classList.toggle('open', !verified);
+  _fitMessages();
+}
+export function hideSafetyCode() { document.getElementById('safety-bar').hidden = true; _fitMessages(); }
+export function toggleSafetyDetail() { document.getElementById('safety-bar').classList.toggle('open'); _fitMessages(); }
+
+// La liste des messages commence sous le bandeau du code de sécurité
+function _fitMessages() {
+  const bar = document.getElementById('safety-bar');
+  const box = document.getElementById('messages');
+  box.style.top = bar.hidden ? '' : (52 + bar.offsetHeight) + 'px';
+}
+
+export function alertToast(text) { _toast(text, 'screenshot-toast', 6000); }
+
 // ── Interne ───────────────────────────────────────────────────────────
+
+const _SAFE_IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
 
 function _appendMsg(msg, scroll) {
   const box  = document.getElementById('messages');
@@ -178,7 +204,16 @@ function _appendMsg(msg, scroll) {
   el.className    = 'msg ' + (msg.mine ? 'mine' : 'theirs');
   el.dataset.id   = msg.id;
 
-  if (msg.isImage) {
+  if (msg.isImage && !_SAFE_IMG.test(msg.text || '')) {
+    const txt = document.createElement('div');
+    txt.className = 'msg-text'; txt.textContent = '[image refusée]';
+    el.appendChild(txt);
+  } else if (msg.isImage) {
+    if (msg.from) {
+      const who = document.createElement('div');
+      who.className = 'msg-from'; who.textContent = msg.from;
+      el.appendChild(who);
+    }
     const img     = document.createElement('img');
     img.src       = msg.text;
     img.className = 'msg-img';

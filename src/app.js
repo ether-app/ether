@@ -11,6 +11,22 @@ import * as Groups  from './groups.js';
 
 let _identity = null;
 let _mode     = 'direct'; // 'direct' | 'group'
+let _currentPeer = null, _currentCode = null;
+const _verified  = new Map(); // peerId → code confirmé (mémoire de session uniquement)
+
+// Lien d'invitation : app.html#c=<id>. Le fragment (#) n'est jamais envoyé au serveur.
+function _inviteLink(id) { return location.origin + location.pathname + '#c=' + id; }
+function _idFrom(text) {
+  const t = (text || '').trim();
+  const m = t.match(/#c=(e-[0-9a-f]{20})$/);
+  if (m) return m[1];
+  return t; // ID collé tel quel
+}
+let _pendingInvite = (() => {
+  const m = location.hash.match(/^#c=(e-[0-9a-f]{20})$/);
+  if (location.hash) history.replaceState(null, '', location.pathname);
+  return m ? m[1] : null;
+})();
 
 // ── Boot ──────────────────────────────────────────────────────────────
 
@@ -18,24 +34,40 @@ async function main() {
   Storage.purge();
   _identity = await Crypto.loadOrGenerate();
 
-  UI.initIdentity(_identity.id);
+  UI.initIdentity(_identity.id, _inviteLink(_identity.id));
   UI.setPeerStatus('Initialisation...');
 
   Peer.init(_identity, {
-    onReady:      ()           => UI.setPeerStatus('En ligne · prêt', true),
-    onIncoming:   peerId       => { _mode = 'direct'; UI.openChat(peerId); UI.renderAll(Storage.load()); },
+    onReady:      ()           => {
+      UI.setPeerStatus('En ligne · prêt', true);
+      if (_pendingInvite && _pendingInvite !== _identity.id) {
+        const target = _pendingInvite; _pendingInvite = null;
+        document.getElementById('tab-direct').click();
+        UI.showScreen('screen-connect');
+        document.getElementById('peer-id-input').value = target;
+        _doConnect();
+      }
+    },
+    onIncoming:   peerId       => { _mode = 'direct'; UI.hideSafetyCode(); UI.openChat(peerId); UI.renderAll(Storage.load()); },
     onMessage:    ({ text, ttl, isImage }) => {
       const msg = Storage.push(text, false, ttl || CONFIG.TTL.text, isImage);
       UI.renderMessage(msg);
       UI.notifyMessage(text, isImage);
     },
     onScreenshot: ()           => UI.showScreenshotToast(),
-    onSecured:    ()           => UI.sysMsg('Connecté ✓ — tu peux écrire.'),
+    onSecured:    ({ peerId, code }) => {
+      UI.sysMsg('Connecté ✓ — tu peux écrire.');
+      UI.showSafetyCode(code, _verified.get(peerId) === code);
+      _currentPeer = peerId; _currentCode = code;
+    },
+    onAlert:      text         => { UI.hideSafetyCode(); UI.sysMsg('⚠ ' + text); UI.alertToast(text); },
     onDisconnect: ()           => UI.sysMsg('Contact déconnecté. Reconnexion...'),
     onReconnect:  ()           => UI.sysMsg('Reconnecté ✓'),
   });
 
-  await UI.requestNotifPermission();
+  // Ne pas attendre la réponse à la demande de notifications : tant qu'elle
+  // reste sans réponse, aucun bouton ne serait branché.
+  UI.requestNotifPermission();
   _wireIdentityScreen();
   _wireConnectScreen();
   _wireChatScreen();
@@ -47,12 +79,18 @@ async function main() {
 // ── Screen 1 — Identité ───────────────────────────────────────────────
 
 function _wireIdentityScreen() {
-  document.getElementById('btn-copy').addEventListener('click', () => {
-    navigator.clipboard.writeText(_identity.id).then(() => {
-      const btn = document.getElementById('btn-copy');
-      btn.textContent = 'Copié ✓';
-      setTimeout(() => btn.textContent = 'Copier mon ID', 2000);
-    });
+  document.getElementById('btn-copy').addEventListener('click', async () => {
+    const url = _inviteLink(_identity.id);
+    const btn = document.getElementById('btn-copy');
+    if (navigator.share) {
+      try { await navigator.share({ title: 'ÉTHER', text: 'Parlons sur ÉTHER (chiffré, éphémère) :', url }); return; }
+      catch (e) { if (e?.name === 'AbortError') return; }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      btn.textContent = 'Lien copié ✓';
+    } catch { btn.textContent = 'Copie impossible'; }
+    setTimeout(() => btn.textContent = 'Partager mon lien', 2000);
   });
 
   document.getElementById('btn-go-connect').addEventListener('click', () => {
@@ -82,10 +120,10 @@ function _wireConnectScreen() {
     UI.setConnectStatus('', 'Création du groupe...');
     try {
       const token = await Groups.create(_identity.id, {
-        onMessage: ({ text, from, ttl }) => {
-          const msg = Storage.push(`[${from}] ${text}`, false, ttl);
-          UI.renderMessage(msg);
-          UI.notifyMessage(text, false);
+        onMessage: ({ text, from, ttl, isImage }) => {
+          const msg = Storage.push(text, false, ttl, isImage);
+          UI.renderMessage({ ...msg, from });
+          UI.notifyMessage(text, isImage);
         },
         onMember: n => UI.setGroupMemberCount(n),
       });
@@ -113,7 +151,7 @@ function _switchTab(tab) {
 }
 
 async function _doConnect() {
-  const targetId = document.getElementById('peer-id-input').value.trim();
+  const targetId = _idFrom(document.getElementById('peer-id-input').value);
   if (!targetId || targetId === _identity.id) {
     UI.setConnectStatus('err', targetId === _identity.id ? 'C\'est ton propre ID.' : 'Colle un ID valide.');
     return;
@@ -139,14 +177,14 @@ async function _doJoinGroup() {
 
   try {
     await Groups.join(token, Peer.getPeer(), {
-      onMessage: ({ text, from, ttl }) => {
-        const msg = Storage.push(text, false, ttl);
+      onMessage: ({ text, from, ttl, isImage }) => {
+        const msg = Storage.push(text, false, ttl, isImage);
         UI.renderMessage({ ...msg, from });
-        UI.notifyMessage(text, false);
+        UI.notifyMessage(text, isImage);
       },
     });
     UI.setConnectStatus('ok', 'Groupe rejoint ✓');
-    setTimeout(() => { _mode = 'group'; UI.openGroupChat(token, false); }, 500);
+    setTimeout(() => { _mode = 'group'; UI.hideSafetyCode(); UI.openGroupChat(token, false); }, 500);
   } catch {
     UI.setConnectStatus('err', 'Groupe introuvable ou expiré.');
     document.getElementById('btn-join-group').disabled = false;
@@ -166,6 +204,19 @@ function _wireChatScreen() {
     document.getElementById('photo-input').click();
   });
   document.getElementById('photo-input').addEventListener('change', _sendPhoto);
+
+  // Code de sécurité
+  document.getElementById('btn-safety-same').addEventListener('click', () => {
+    if (_currentPeer) _verified.set(_currentPeer, _currentCode);
+    UI.showSafetyCode(_currentCode, true);
+  });
+  document.getElementById('btn-safety-diff').addEventListener('click', () => {
+    Peer.disconnect();
+    UI.hideSafetyCode();
+    UI.alertToast('Codes différents : connexion coupée. Reconnectez-vous en scannant le QR code en personne.');
+    UI.sysMsg('⚠ Connexion coupée — codes de sécurité différents.');
+  });
+  document.getElementById('btn-safety-toggle').addEventListener('click', UI.toggleSafetyDetail);
 }
 
 async function _sendMsg() {
@@ -202,7 +253,7 @@ async function _sendPhoto() {
   try {
     const b64 = await Crypto.compressImage(file, CONFIG.PHOTO_MAX_PX, CONFIG.PHOTO_QUALITY);
     if (_mode === 'group') {
-      await Groups.send(b64, _identity.id.slice(0, 8));
+      await Groups.send(b64, _identity.id.slice(0, 8), true);
     } else {
       if (!Peer.isConnected()) { UI.sysMsg('Connexion en cours, patiente 2 secondes...'); return; }
       await Peer.send(b64, CONFIG.TTL.image, true);
@@ -234,7 +285,8 @@ function _wireGroupScreens() {
 function _wireQRScanner() {
   document.getElementById('btn-scan-qr').addEventListener('click', () => {
     UI.openQRScanner(result => {
-      document.getElementById('peer-id-input').value = result;
+      document.getElementById('peer-id-input').value = _idFrom(result);
+      _doConnect();
     });
   });
 

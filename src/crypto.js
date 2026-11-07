@@ -42,7 +42,7 @@ async function importPriv(jwk) {
   return crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
 }
 
-async function pubToId(b64) {
+export async function pubToId(b64) {
   const raw    = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const digest = await crypto.subtle.digest('SHA-256', raw);
   return 'e-' + Array.from(new Uint8Array(digest)).slice(0, 10)
@@ -71,6 +71,25 @@ export async function loadOrGenerate() {
   localStorage.setItem(STORE_PRIV, JSON.stringify(privJwk));
 
   return { privateKey: pair.privateKey, publicKey: pair.publicKey, pubKeyB64, id };
+}
+
+// Code de sécurité : empreinte des DEUX clés publiques, identique des deux côtés.
+// À comparer de vive voix ; un intermédiaire produirait un code différent.
+// 5 groupes de 5 chiffres (~83 bits).
+export async function safetyCode(pubA, pubB) {
+  const [x, y]  = [pubA, pubB].sort();
+  const digest  = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(x + '|' + y)));
+  const view    = new DataView(digest.buffer);
+  const groups  = [];
+  for (let i = 0; i < 5; i++) groups.push(String(view.getUint32(i * 4) % 100000).padStart(5, '0'));
+  return groups.join(' ');
+}
+
+// Seules les photos produites par compressImage (JPEG en base64) sont affichées :
+// une URL externe ferait fuiter l'adresse IP du destinataire.
+const SAFE_IMAGE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
+export function isSafeImage(src) {
+  return typeof src === 'string' && src.length < 8_000_000 && SAFE_IMAGE.test(src);
 }
 
 export async function deriveSharedKey(ourPrivateKey, theirPubKeyB64) {

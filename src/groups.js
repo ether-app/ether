@@ -6,7 +6,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import CONFIG from './config.js';
-import { bytesToB64 } from './crypto.js';
+import { bytesToB64, isSafeImage } from './crypto.js';
+import * as Chunks from './chunks.js';
 
 const GROUP_TTL = 6 * 60 * 60 * 1000; // 6h
 const MAX_MEMBERS = 10;
@@ -95,16 +96,21 @@ async function create(myPeerId, callbacks) {
     _memberConns.set(c.peer, c);
     _onMember(_memberConns.size + 1); // +1 for hub
 
-    c.on('data', async data => {
-      if (data.type !== 'gmsg') return;
+    const assemble = Chunks.createAssembler();
+    c.on('data', async raw => {
+      const data = assemble(raw);
+      if (data?.type !== 'gmsg') return;
       try {
         const text = await decryptGroup(data.payload);
+        const isImage = data.isImage === true;
+        if (isImage && !isSafeImage(text)) return;
         // Relayer à tous les autres membres
+        const parts = Chunks.split(data, 'payload');
         _memberConns.forEach((mc, pid) => {
-          if (pid !== c.peer && mc.open) mc.send(data);
+          if (pid !== c.peer && mc.open) parts.forEach(p => mc.send(p));
         });
         // Notifier l'UI du hub
-        _onMessage({ text, from: c.peer.slice(0, 8), ttl: GROUP_TTL });
+        _onMessage({ text, from: c.peer.slice(0, 8), ttl: GROUP_TTL, isImage });
       } catch { /* ignore */ }
     });
 
@@ -134,11 +140,15 @@ async function join(token, myPeer, callbacks) {
 
     _hubConn.on('open', () => {
       clearTimeout(timeout);
-      _hubConn.on('data', async data => {
-        if (data.type !== 'gmsg') return;
+      const assemble = Chunks.createAssembler();
+      _hubConn.on('data', async raw => {
+        const data = assemble(raw);
+        if (data?.type !== 'gmsg') return;
         try {
           const text = await decryptGroup(data.payload);
-          _onMessage({ text, from: data.from, ttl: GROUP_TTL });
+          const isImage = data.isImage === true;
+          if (isImage && !isSafeImage(text)) return;
+          _onMessage({ text, from: data.from, ttl: GROUP_TTL, isImage });
         } catch { /* ignore */ }
       });
       resolve();
@@ -150,17 +160,17 @@ async function join(token, myPeer, callbacks) {
 
 // ── Envoyer dans le groupe ────────────────────────────────────────────
 
-async function send(text, shortId) {
+async function send(text, shortId, isImage = false) {
   const payload = await encryptGroup(text);
-  const data    = { type: 'gmsg', payload, from: shortId };
+  const data    = { type: 'gmsg', payload, from: shortId, isImage };
+  const parts   = Chunks.split(data, 'payload');
 
   if (_isHub) {
-    // Hub : relayer à tous
-    _memberConns.forEach(c => { if (c.open) c.send(data); });
-    _onMessage({ text, from: 'moi', ttl: GROUP_TTL });
+    // Hub : relayer à tous (l'affichage local est fait par l'appelant)
+    _memberConns.forEach(c => { if (c.open) parts.forEach(p => c.send(p)); });
   } else {
     // Membre : envoyer au hub
-    if (_hubConn?.open) _hubConn.send(data);
+    if (_hubConn?.open) parts.forEach(p => _hubConn.send(p));
   }
 }
 

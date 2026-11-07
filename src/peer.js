@@ -6,6 +6,7 @@
 
 import CONFIG from './config.js';
 import * as Crypto from './crypto.js';
+import * as Chunks from './chunks.js';
 
 let _peer         = null;
 let _conn         = null;
@@ -21,6 +22,7 @@ let _onDisconnect = () => {};
 let _onIncoming   = () => {};
 let _onReconnect  = () => {};
 let _onSecured    = () => {};
+let _onAlert      = () => {};
 
 // ── Init ──────────────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ function init(identity, cbs) {
   _onIncoming   = cbs.onIncoming   || _onIncoming;
   _onReconnect  = cbs.onReconnect  || _onReconnect;
   _onSecured    = cbs.onSecured    || _onSecured;
+  _onAlert      = cbs.onAlert      || _onAlert;
 
   _boot();
 }
@@ -99,22 +102,39 @@ function _tryAutoReconnect() {
 // ── Câblage connexion ─────────────────────────────────────────────────
 
 function _wire(c) {
+  // Une seule connexion active : l'ancienne (reconnexion) est fermée
+  if (_conn && _conn !== c) { const old = _conn; _conn = null; old.close(); }
   _conn      = c;
   _sharedKey = null;
+  const assemble = Chunks.createAssembler();
 
-  c.on('data', async data => {
+  c.on('data', async raw => {
+    if (_conn !== c) return; // données d'une connexion remplacée
+    const data = assemble(raw);
     if (!data || !data.type) return;
 
     if (data.type === 'pubkey') {
-      // Dérive le secret partagé dès réception de la clé publique du pair
+      // L'identifiant d'un pair EST l'empreinte de sa clé publique : une clé qui
+      // ne correspond pas à l'identifiant appelé trahit une interception.
+      let ok = false;
+      try { ok = typeof data.key === 'string' && (await Crypto.pubToId(data.key)) === c.peer; } catch {}
+      if (!ok) {
+        _sharedKey = null;
+        _onAlert('La clé reçue ne correspond pas à l\'identifiant de ton contact. Connexion coupée : possible interception.');
+        c.close();
+        return;
+      }
       _sharedKey = await Crypto.deriveSharedKey(_identity.privateKey, data.key);
-      _onSecured();
+      _onSecured({ peerId: c.peer, code: await Crypto.safetyCode(_identity.pubKeyB64, data.key) });
       return;
     }
     if (data.type === 'msg') {
       if (!_sharedKey) return; // message arrivé avant la fin de l'échange de clé
-      const text = await Crypto.decrypt(_sharedKey, data.text);
-      _onMessage({ text, ttl: data.ttl, isImage: data.isImage || false });
+      let text;
+      try { text = await Crypto.decrypt(_sharedKey, data.text); } catch { return; }
+      const isImage = data.isImage === true;
+      if (isImage && !Crypto.isSafeImage(text)) return; // image externe refusée
+      _onMessage({ text, ttl: data.ttl, isImage });
       return;
     }
     if (data.type === 'screenshot') {
@@ -122,8 +142,15 @@ function _wire(c) {
     }
   });
 
-  c.on('close', () => { _conn = null; _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
-  c.on('error', () => { _conn = null; _sharedKey = null; _onDisconnect(); _tryAutoReconnect(); });
+  const lost = () => {
+    if (_conn !== c) return; // ancienne connexion déjà remplacée
+    _conn = null; _sharedKey = null; _onDisconnect(); _tryAutoReconnect();
+  };
+  c.on('close', lost);
+  c.on('error', err => {
+    if (err?.type === 'message-too-big') { console.warn('[peer] message trop gros'); return; }
+    lost();
+  });
 
   // Échange de clé publique — condition du chiffrement E2E de la connexion
   const exchangeKey = () => {
@@ -140,7 +167,7 @@ async function send(text, ttl, isImage = false) {
   if (!_conn?.open) throw new Error('non connecté');
   if (!_sharedKey)  throw new Error('échange de clé en cours');
   const cipher = await Crypto.encrypt(_sharedKey, text);
-  _conn.send({ type: 'msg', text: cipher, ttl, isImage });
+  for (const part of Chunks.split({ type: 'msg', text: cipher, ttl, isImage }, 'text')) _conn.send(part);
 }
 
 function sendScreenshot() {
@@ -149,5 +176,6 @@ function sendScreenshot() {
 
 function isConnected() { return !!_conn?.open && !!_sharedKey; }
 function getPeer()     { return _peer; }
+function disconnect()  { _lastPeerId = null; _conn?.close(); }
 
-export { init, connect, send, sendScreenshot, isConnected, getPeer };
+export { init, connect, send, sendScreenshot, isConnected, getPeer, disconnect };

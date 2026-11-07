@@ -2,7 +2,7 @@
 // Utilise self.registration.scope pour fonctionner en sous-répertoire
 // (GitHub Pages : /ether/) comme en racine (localhost)
 
-const VERSION = 'ether-v1.3';
+const VERSION = 'ether-v1.5';
 
 self.addEventListener('install', e => {
   const scope = self.registration.scope;
@@ -10,7 +10,7 @@ self.addEventListener('install', e => {
     '', 'app.html', 'manifest.json',
     'src/style.css', 'src/config.js', 'src/crypto.js',
     'src/storage.js', 'src/peer.js', 'src/ui.js',
-    'src/app.js', 'src/groups.js',
+    'src/app.js', 'src/groups.js', 'src/chunks.js',
   ].map(p => scope + p);
 
   e.waitUntil(
