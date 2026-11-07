@@ -8,6 +8,16 @@
 const STORE_PRIV = 'ether_privkey';
 const STORE_PUB  = 'ether_pubkey';
 
+// Conversion octets → base64 par blocs : String.fromCharCode(...gros tableau)
+// dépasse la pile (« Maximum call stack size exceeded ») au-delà de ~65 000 octets.
+export function bytesToB64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
 async function generateKeypair() {
   return crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits'],
@@ -16,7 +26,7 @@ async function generateKeypair() {
 
 export async function exportPub(publicKey) {
   const raw = await crypto.subtle.exportKey('raw', publicKey);
-  return btoa(String.fromCharCode(...new Uint8Array(raw)));
+  return bytesToB64(new Uint8Array(raw));
 }
 
 async function exportPriv(privateKey) {
@@ -79,7 +89,7 @@ export async function encrypt(sharedKey, plaintext) {
   const cipher  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, sharedKey, encoded);
   const out     = new Uint8Array(12 + cipher.byteLength);
   out.set(iv); out.set(new Uint8Array(cipher), 12);
-  return btoa(String.fromCharCode(...out));
+  return bytesToB64(out);
 }
 
 export async function decrypt(sharedKey, b64) {

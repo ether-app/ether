@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import CONFIG from './config.js';
+import { bytesToB64 } from './crypto.js';
 
 const GROUP_TTL = 6 * 60 * 60 * 1000; // 6h
 const MAX_MEMBERS = 10;
@@ -59,7 +60,7 @@ async function encryptGroup(text) {
   const cipher  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, _groupKey, encoded);
   const out     = new Uint8Array(12 + cipher.byteLength);
   out.set(iv); out.set(new Uint8Array(cipher), 12);
-  return btoa(String.fromCharCode(...out));
+  return bytesToB64(out);
 }
 
 async function decryptGroup(b64) {
