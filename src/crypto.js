@@ -49,7 +49,18 @@ export async function pubToId(b64) {
     .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function loadOrGenerate() {
+export async function loadOrGenerate({ ephemeral = false } = {}) {
+  if (ephemeral) {
+    // Mode sans trace : clé jamais écrite sur l'appareil, nouvelle identité à chaque ouverture
+    localStorage.removeItem(STORE_PUB);
+    localStorage.removeItem(STORE_PRIV);
+    const pair      = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits'],
+    );
+    const pubKeyB64 = await exportPub(pair.publicKey);
+    return { privateKey: pair.privateKey, publicKey: pair.publicKey, pubKeyB64, id: await pubToId(pubKeyB64) };
+  }
+
   const storedPub  = localStorage.getItem(STORE_PUB);
   const storedPriv = localStorage.getItem(STORE_PRIV);
 

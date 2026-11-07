@@ -39,6 +39,7 @@ export function setConnectBtnDisabled(v) { document.getElementById('btn-do-conne
 // ── Screen 3 — Chat 1-1 ───────────────────────────────────────────────
 
 export function openChat(peerId) {
+  document.getElementById('btn-burn').hidden = false;
   const label = peerId.length > 22 ? peerId.slice(0, 22) + '…' : peerId;
   document.getElementById('contact-label').textContent = label;
   document.getElementById('member-count').textContent  = '';
@@ -66,6 +67,7 @@ export function setGroupMemberCount(n) {
 // ── Screen Chat — groupe ──────────────────────────────────────────────
 
 export function openGroupChat(token, isHub) {
+  document.getElementById('btn-burn').hidden = true; // lecture unique : messages directs uniquement
   document.getElementById('contact-label').textContent = `Groupe ${token}`;
   setGroupMemberCount(isHub ? 1 : null);
   showScreen('screen-chat');
@@ -194,6 +196,56 @@ function _fitMessages() {
 
 export function alertToast(text) { _toast(text, 'screenshot-toast', 6000); }
 
+// ── Lecture unique ────────────────────────────────────────────────────
+
+const BURN_READ_MS = 10_000; // durée d'affichage après ouverture
+let _onBurn = () => {};
+export function setBurnHandler(fn) { _onBurn = fn; }
+
+export function setBurnMode(on) {
+  const b = document.getElementById('btn-burn');
+  b.classList.toggle('active', on);
+  b.setAttribute('aria-pressed', String(on));
+  document.getElementById('msg-input').placeholder = on ? 'Message à lecture unique...' : 'Message...';
+}
+
+/** Détruit un message affiché (accusé reçu côté expéditeur). */
+export function burnMessage(id) {
+  const el = document.querySelector(`#messages [data-id="${CSS.escape(id)}"]`);
+  if (!el) return;
+  el.classList.add('gone');
+  setTimeout(() => el.remove(), 900);
+  sysMsg('🔥 Message lu et détruit.');
+}
+
+function _setupBurn(el, msg) {
+  el.classList.add('burn');
+  const ttlEl = el.querySelector('.msg-ttl');
+  if (msg.mine) { el._label = '🔥 non lu'; ttlEl.textContent = el._label; return; }
+
+  el.classList.add('sealed');
+  el._label = '🔥 Toucher pour lire';
+  ttlEl.textContent = el._label;
+  el.addEventListener('click', () => {
+    if (!el.classList.contains('sealed')) return;
+    el.classList.remove('sealed');
+    const end = Date.now() + BURN_READ_MS;
+    const tick = () => {
+      const left = end - Date.now();
+      if (left <= 0) {
+        el.classList.add('gone');
+        setTimeout(() => el.remove(), 900);
+        _onBurn(msg.id);
+        return;
+      }
+      el._label = '🔥 ' + Math.ceil(left / 1000) + 's';
+      ttlEl.textContent = el._label;
+      setTimeout(tick, 250);
+    };
+    tick();
+  }, { once: false });
+}
+
 // ── Interne ───────────────────────────────────────────────────────────
 
 const _SAFE_IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
@@ -232,6 +284,7 @@ function _appendMsg(msg, scroll) {
   box.appendChild(el);
 
   if (scroll) box.scrollTop = box.scrollHeight;
+  if (msg.burn) _setupBurn(el, msg);
   _tickTTL(el, msg);
 }
 
@@ -240,8 +293,8 @@ function _tickTTL(el, msg) {
   const tick  = () => {
     const left = msg.expires - Date.now();
     if (left <= 0)         { el.classList.add('gone'); setTimeout(() => el.remove(), 900); return; }
-    if (left < 3_600_000)  el.classList.add('soon');
-    ttlEl.textContent = _fmt(left);
+    if (left < 3_600_000 && !el._label)  el.classList.add('soon');
+    ttlEl.textContent = el._label || _fmt(left);
     setTimeout(tick, 1000);
   };
   tick();

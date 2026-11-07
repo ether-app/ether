@@ -18,7 +18,7 @@ const CONFIG = {
   PHOTO_MAX_PX:     1024,  // résolution max avant compression
   PHOTO_QUALITY:    0.72,  // qualité JPEG
 
-  VERSION: '1.3.0',
+  VERSION: '1.4.0',
 };
 
 export default CONFIG;

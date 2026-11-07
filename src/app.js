@@ -30,9 +30,18 @@ let _pendingInvite = (() => {
 
 // ── Boot ──────────────────────────────────────────────────────────────
 
+const NOTRACE_KEY = 'ether_notrace';
+function _noTrace() { try { return localStorage.getItem(NOTRACE_KEY) === '1'; } catch { return false; } }
+
+let _burn = false; // mode lecture unique pour les prochains envois
+
 async function main() {
+  const noTrace = _noTrace();
+  Storage.setEphemeral(noTrace);
   Storage.purge();
-  _identity = await Crypto.loadOrGenerate();
+  _identity = await Crypto.loadOrGenerate({ ephemeral: noTrace });
+  document.getElementById('chk-notrace').checked = noTrace;
+  UI.setBurnHandler(id => Peer.sendBurned(id));
 
   UI.initIdentity(_identity.id, _inviteLink(_identity.id));
   UI.setPeerStatus('Initialisation...');
@@ -49,11 +58,19 @@ async function main() {
       }
     },
     onIncoming:   peerId       => { _mode = 'direct'; UI.hideSafetyCode(); UI.openChat(peerId); UI.renderAll(Storage.load()); },
-    onMessage:    ({ text, ttl, isImage }) => {
+    onMessage:    ({ text, ttl, isImage, burn, id }) => {
+      if (burn) {
+        // Lecture unique : jamais enregistré, détruit après lecture
+        UI.renderMessage({ id: id || crypto.randomUUID(), text, mine: false, isImage, burn: true,
+                           expires: Date.now() + (ttl || CONFIG.TTL.text) });
+        UI.notifyMessage('🔥 Message à lecture unique', false);
+        return;
+      }
       const msg = Storage.push(text, false, ttl || CONFIG.TTL.text, isImage);
       UI.renderMessage(msg);
       UI.notifyMessage(text, isImage);
     },
+    onBurned:     id           => UI.burnMessage(id),
     onScreenshot: ()           => UI.showScreenshotToast(),
     onSecured:    ({ peerId, code }) => {
       UI.sysMsg('Connecté ✓ — tu peux écrire.');
@@ -91,6 +108,20 @@ function _wireIdentityScreen() {
       btn.textContent = 'Lien copié ✓';
     } catch { btn.textContent = 'Copie impossible'; }
     setTimeout(() => btn.textContent = 'Partager mon lien', 2000);
+  });
+
+  // Mode sans trace : effacement immédiat puis redémarrage avec une identité éphémère
+  document.getElementById('chk-notrace').addEventListener('change', e => {
+    try {
+      if (e.target.checked) {
+        // Uniquement les données d'ÉTHER : l'origine peut être partagée avec d'autres pages
+        Object.keys(localStorage).filter(k => k.startsWith('ether_')).forEach(k => localStorage.removeItem(k));
+        localStorage.setItem(NOTRACE_KEY, '1');
+      } else {
+        localStorage.removeItem(NOTRACE_KEY);
+      }
+    } catch {}
+    location.reload();
   });
 
   document.getElementById('btn-go-connect').addEventListener('click', () => {
@@ -184,7 +215,7 @@ async function _doJoinGroup() {
       },
     });
     UI.setConnectStatus('ok', 'Groupe rejoint ✓');
-    setTimeout(() => { _mode = 'group'; UI.hideSafetyCode(); UI.openGroupChat(token, false); }, 500);
+    setTimeout(() => { _mode = 'group'; _burn = false; UI.setBurnMode(false); UI.hideSafetyCode(); UI.openGroupChat(token, false); }, 500);
   } catch {
     UI.setConnectStatus('err', 'Groupe introuvable ou expiré.');
     document.getElementById('btn-join-group').disabled = false;
@@ -217,6 +248,13 @@ function _wireChatScreen() {
     UI.sysMsg('⚠ Connexion coupée — codes de sécurité différents.');
   });
   document.getElementById('btn-safety-toggle').addEventListener('click', UI.toggleSafetyDetail);
+
+  // Lecture unique
+  document.getElementById('btn-burn').addEventListener('click', () => {
+    _burn = !_burn;
+    UI.setBurnMode(_burn);
+    UI.sysMsg(_burn ? '🔥 Lecture unique activée : tes messages seront détruits après lecture.' : 'Lecture unique désactivée.');
+  });
 }
 
 async function _sendMsg() {
@@ -237,11 +275,21 @@ async function _sendMsg() {
 
   if (!Peer.isConnected()) { UI.sysMsg('Connexion en cours, patiente 2 secondes...'); return; }
   try {
-    await Peer.send(text, CONFIG.TTL.text);
-    const msg = Storage.push(text, true, CONFIG.TTL.text);
-    UI.renderMessage(msg);
+    await _sendDirect(text, CONFIG.TTL.text, false);
     input.value = '';
   } catch (err) { UI.sysMsg('Erreur : ' + err.message); }
+}
+
+// Envoi direct, avec ou sans lecture unique
+async function _sendDirect(text, ttl, isImage) {
+  if (_burn) {
+    const id = crypto.randomUUID();
+    await Peer.send(text, ttl, isImage, { burn: true, id });
+    UI.renderMessage({ id, text, mine: true, isImage, burn: true, expires: Date.now() + ttl });
+    return;
+  }
+  await Peer.send(text, ttl, isImage);
+  UI.renderMessage(Storage.push(text, true, ttl, isImage));
 }
 
 async function _sendPhoto() {
@@ -256,7 +304,8 @@ async function _sendPhoto() {
       await Groups.send(b64, _identity.id.slice(0, 8), true);
     } else {
       if (!Peer.isConnected()) { UI.sysMsg('Connexion en cours, patiente 2 secondes...'); return; }
-      await Peer.send(b64, CONFIG.TTL.image, true);
+      await _sendDirect(b64, CONFIG.TTL.image, true);
+      return;
     }
     const msg = Storage.push(b64, true, CONFIG.TTL.image, true);
     UI.renderMessage(msg);
@@ -275,7 +324,7 @@ function _wireGroupScreens() {
   });
 
   document.getElementById('btn-group-open-chat').addEventListener('click', () => {
-    _mode = 'group';
+    _mode = 'group'; _burn = false; UI.setBurnMode(false);
     UI.openGroupChat(Groups.getToken(), true);
   });
 }

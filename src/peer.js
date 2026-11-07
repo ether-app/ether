@@ -23,6 +23,7 @@ let _onIncoming   = () => {};
 let _onReconnect  = () => {};
 let _onSecured    = () => {};
 let _onAlert      = () => {};
+let _onBurned     = () => {};
 
 // ── Init ──────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ function init(identity, cbs) {
   _onReconnect  = cbs.onReconnect  || _onReconnect;
   _onSecured    = cbs.onSecured    || _onSecured;
   _onAlert      = cbs.onAlert      || _onAlert;
+  _onBurned     = cbs.onBurned     || _onBurned;
 
   _boot();
 }
@@ -134,7 +136,12 @@ function _wire(c) {
       try { text = await Crypto.decrypt(_sharedKey, data.text); } catch { return; }
       const isImage = data.isImage === true;
       if (isImage && !Crypto.isSafeImage(text)) return; // image externe refusée
-      _onMessage({ text, ttl: data.ttl, isImage });
+      _onMessage({ text, ttl: data.ttl, isImage, burn: data.burn === true,
+                   id: typeof data.id === 'string' ? data.id.slice(0, 64) : null });
+      return;
+    }
+    if (data.type === 'burned') {
+      if (typeof data.id === 'string') _onBurned(data.id);
       return;
     }
     if (data.type === 'screenshot') {
@@ -163,11 +170,16 @@ function _wire(c) {
 
 // ── Envoi ─────────────────────────────────────────────────────────────
 
-async function send(text, ttl, isImage = false) {
+async function send(text, ttl, isImage = false, { burn = false, id = null } = {}) {
   if (!_conn?.open) throw new Error('non connecté');
   if (!_sharedKey)  throw new Error('échange de clé en cours');
   const cipher = await Crypto.encrypt(_sharedKey, text);
-  for (const part of Chunks.split({ type: 'msg', text: cipher, ttl, isImage }, 'text')) _conn.send(part);
+  for (const part of Chunks.split({ type: 'msg', text: cipher, ttl, isImage, burn, id }, 'text')) _conn.send(part);
+}
+
+// Accusé de destruction d'un message à lecture unique
+function sendBurned(id) {
+  if (_conn?.open) _conn.send({ type: 'burned', id });
 }
 
 function sendScreenshot() {
@@ -178,4 +190,4 @@ function isConnected() { return !!_conn?.open && !!_sharedKey; }
 function getPeer()     { return _peer; }
 function disconnect()  { _lastPeerId = null; _conn?.close(); }
 
-export { init, connect, send, sendScreenshot, isConnected, getPeer, disconnect };
+export { init, connect, send, sendBurned, sendScreenshot, isConnected, getPeer, disconnect };

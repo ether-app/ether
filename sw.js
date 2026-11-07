@@ -2,7 +2,7 @@
 // Utilise self.registration.scope pour fonctionner en sous-répertoire
 // (GitHub Pages : /ether/) comme en racine (localhost)
 
-const VERSION = 'ether-v1.5';
+const VERSION = 'ether-v1.6';
 
 self.addEventListener('install', e => {
   const scope = self.registration.scope;
@@ -15,7 +15,9 @@ self.addEventListener('install', e => {
 
   e.waitUntil(
     caches.open(VERSION)
-      .then(c => c.addAll(ASSETS))
+      // cache: 'reload' contourne le cache HTTP : sinon une mise à jour peut
+      // mélanger anciens et nouveaux fichiers (ex. fonction introuvable au démarrage)
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
       .catch(() => {}) // ne pas bloquer si un asset manque
   );
