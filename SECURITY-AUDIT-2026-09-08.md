@@ -7,6 +7,19 @@
 
 ## Score global : 49/100 — 🔴 STOP (corrections critiques avant de présenter l'app comme "E2E")
 
+## Suivi des corrections (màj 2026-11-11)
+
+| # | Faille | Statut |
+|---|---|---|
+| 1 | E2E désactivé | ✅ Corrigé (f3750af, 2026-09-08) |
+| 2 | Signalisation tierce / MITM | 🟡 Atténué (a6403e7) : clé vérifiée contre l'ID + code de sécurité. Signalisation toujours sur `0.peerjs.com` (Railway supprimé) |
+| 3 | `img.src` sans validation (fuite IP) | ✅ Corrigé (a6403e7) : seules les images `data:image/...` sont affichées |
+| 4 | Serveur sans Helmet / CORS / rate limit | ⏸ Serveur non déployé ; à faire avant tout déploiement |
+| 5 | Dépendances `ws` / `qs` | ⏸ Idem |
+| 6 | Sel PBKDF2 statique (groupes) | ⏸ Ouvert |
+| 7 | Clé privée en clair dans localStorage | 🟡 Atténué (a53615d) : le mode sans trace ne l'écrit jamais |
+| 8 | Pas de limite de débit (groupes) | ⏸ Ouvert |
+
 ## Résumé exécutif
 
 ÉTHER est propre sur les fondamentaux (pas de secret exposé, pas de `.env` commité, stockage 100% client, TTL appliqué). Le problème n'est pas une faille technique classique : **la promesse centrale du produit — le chiffrement de bout en bout — n'est plus effective pour les messages directs**, alors qu'elle est toujours annoncée dans le README, la landing page et l'UI de chat. `crypto.js` (ECDH + AES-GCM) existe mais n'est appelé nulle part dans `peer.js`/`app.js` pour les messages 1-to-1 : ils partent en clair dans le payload JSON du DataChannel, protégés uniquement par le DTLS natif de WebRTC. Pour un outil de messagerie éphémère dont l'argument de vente est justement la confidentialité, c'est le point à traiter en priorité — avant tout autre polish.
